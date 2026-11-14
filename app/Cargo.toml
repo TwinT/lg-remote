@@ -1,0 +1,20 @@
+[package]
+name = "lg-app"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "lg-remote"
+path = "src/main.rs"
+
+[dependencies]
+lg-core = { path = "../core" }
+slint = { version = "1.18.1", features = ["backend-android-activity-06"] }
+tokio = { version = "1", features = ["rt", "time", "sync"] }
+serde_json = "1"
+
+[build-dependencies]
+slint-build = "1.18.1"

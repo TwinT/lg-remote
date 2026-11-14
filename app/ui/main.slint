@@ -1,0 +1,75 @@
+component Btn inherits Rectangle {
+    in property <string> label;
+    in property <color> tint: #2b2f36;
+    callback clicked();
+    background: ta.pressed ? #5a6376 : root.tint;
+    border-radius: 18px;
+    Text {
+        text: root.label;
+        color: white;
+        font-size: 24px;
+        font-weight: 700;
+    }
+    ta := TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+export component MainWindow inherits Window {
+    in property <string> status: "Conectando...";
+    callback button(string);
+    callback request(string);
+    background: #101216;
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+        Text {
+            text: root.status;
+            color: #9aa3b2;
+            font-size: 16px;
+            horizontal-alignment: center;
+            vertical-stretch: 0;
+        }
+        HorizontalLayout {
+            spacing: 12px;
+            vertical-stretch: 1;
+            Btn { label: "Power"; tint: #b3261e; clicked => { root.request("ssap://system/turnOff"); } }
+            Btn { label: "Mute"; clicked => { root.button("MUTE"); } }
+        }
+        GridLayout {
+            spacing: 12px;
+            vertical-stretch: 3;
+            Row {
+                Rectangle { }
+                Btn { label: "^"; clicked => { root.button("UP"); } }
+                Rectangle { }
+            }
+            Row {
+                Btn { label: "<"; clicked => { root.button("LEFT"); } }
+                Btn { label: "OK"; tint: #3a4a7a; clicked => { root.button("ENTER"); } }
+                Btn { label: ">"; clicked => { root.button("RIGHT"); } }
+            }
+            Row {
+                Rectangle { }
+                Btn { label: "v"; clicked => { root.button("DOWN"); } }
+                Rectangle { }
+            }
+        }
+        HorizontalLayout {
+            spacing: 12px;
+            vertical-stretch: 1;
+            Btn { label: "Back"; clicked => { root.button("BACK"); } }
+            Btn { label: "Home"; clicked => { root.button("HOME"); } }
+            Btn { label: "Exit"; clicked => { root.button("EXIT"); } }
+        }
+        HorizontalLayout {
+            spacing: 12px;
+            vertical-stretch: 1;
+            Btn { label: "Vol -"; clicked => { root.request("ssap://audio/volumeDown"); } }
+            Btn { label: "Vol +"; clicked => { root.request("ssap://audio/volumeUp"); } }
+            Btn { label: "CH -"; clicked => { root.request("ssap://tv/channelDown"); } }
+            Btn { label: "CH +"; clicked => { root.request("ssap://tv/channelUp"); } }
+        }
+    }
+}
