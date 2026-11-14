@@ -1,0 +1,5 @@
+/target
+*.keystore
+*.jks
+*.apk
+.idea/
