@@ -1,4 +1,5 @@
 android:
+  icon: ../icon/icon.png
   manifest:
     package: dev.lgremote
     version_name: "0.1.0"
@@ -8,4 +9,4 @@ android:
     uses_permission:
       - name: android.permission.INTERNET
     application:
-      label: LG Remote
+      label: LG Doom
