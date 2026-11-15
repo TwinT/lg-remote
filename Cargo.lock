@@ -2593,6 +2593,7 @@ name = "lg-app"
 version = "0.1.0"
 dependencies = [
  "lg-core",
+ "png",
  "serde_json",
  "slint",
  "slint-build",

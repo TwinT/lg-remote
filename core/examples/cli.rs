@@ -1,4 +1,4 @@
-// uso: cli discover | cli <ip> request <uri> | cli <ip> button <NOMBRE>
+// uso: cli discover | cli <ip> request <uri> | button <NOMBRE> | launch <appId> | input <inputId>
 // El client-key se guarda en ~/.lg-remote-key
 use lg_core::{Result, Tv, discover};
 use serde_json::json;
@@ -26,6 +26,8 @@ async fn main() -> Result<()> {
     match cmd.as_str() {
         "request" => println!("{}", tv.request(arg, json!({})).await?),
         "button" => tv.button(arg).await?,
+        "launch" => tv.launch(arg).await?,
+        "input" => tv.switch_input(arg).await?,
         _ => eprintln!("comando desconocido"),
     }
     println!("listo en {:?}", t.elapsed());

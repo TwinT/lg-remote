@@ -1,4 +1,3 @@
-// Paleta
 global C {
     out property <color> bg: #0e1014;
     out property <color> surface: #1b1e25;
@@ -6,6 +5,12 @@ global C {
     out property <color> text: #e6e9ef;
     out property <color> muted: #9aa3b2;
     out property <color> accent: #a50034;
+}
+
+export struct Tile {
+    id: string,
+    title: string,
+    icon: image,
 }
 
 // Triángulo apuntando a `rot` grados (0 arriba, 90 derecha, 180 abajo, 270 izquierda).
@@ -22,7 +27,7 @@ component Tri inherits Path {
     fill: C.text;
 }
 
-// Botón redondeado (píldora o círculo según el tamaño); admite icono como hijo.
+// Botón redondeado (píldora o círculo según el tamaño); admite un icono como hijo.
 component Pill inherits Rectangle {
     in property <string> label;
     in property <color> tint: C.surface;
@@ -111,6 +116,69 @@ component DPad inherits Rectangle {
     }
 }
 
+// Área táctil: arrastrar mueve el cursor, tap = click, franja derecha = scroll.
+component TouchPad inherits Rectangle {
+    callback ptr-move(int, int);
+    callback ptr-click();
+    callback ptr-scroll(int);
+    background: C.surface;
+    border-radius: 28px;
+    property <length> last-x;
+    property <length> last-y;
+    property <length> travelled;
+    property <length> scroll-y;
+
+    Text {
+        text: "touchpad";
+        color: C.pressed;
+        font-size: 18px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    Rectangle {
+        x: root.width - 52px; y: 12px;
+        width: 40px; height: root.height - 24px;
+        border-radius: 20px;
+        background: C.bg;
+        Text {
+            text: "scroll";
+            color: C.pressed;
+            font-size: 12px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        TouchArea {
+            pointer-event(e) => {
+                if e.kind == PointerEventKind.down {
+                    root.scroll-y = self.mouse-y;
+                }
+            }
+            moved => {
+                root.ptr-scroll(Math.round((self.mouse-y - root.scroll-y) / 1px));
+                root.scroll-y = self.mouse-y;
+            }
+        }
+    }
+    TouchArea {
+        width: root.width - 64px;
+        pointer-event(e) => {
+            if e.kind == PointerEventKind.down {
+                root.last-x = self.mouse-x;
+                root.last-y = self.mouse-y;
+                root.travelled = 0px;
+            } else if e.kind == PointerEventKind.up && root.travelled < 8px {
+                root.ptr-click();
+            }
+        }
+        moved => {
+            root.travelled += abs(self.mouse-x - root.last-x) + abs(self.mouse-y - root.last-y);
+            root.ptr-move(Math.round((self.mouse-x - root.last-x) / 1px), Math.round((self.mouse-y - root.last-y) / 1px));
+            root.last-x = self.mouse-x;
+            root.last-y = self.mouse-y;
+        }
+    }
+}
+
 // Balancín vertical +/- (volumen, canal).
 component Rocker inherits Rectangle {
     in property <string> title;
@@ -148,11 +216,74 @@ component Rocker inherits Rectangle {
     }
 }
 
+// Icono de app o entrada: imagen de la tele; mientras no esté descargada, el nombre.
+component TileButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> title;
+    in property <bool> show-title: false;
+    callback clicked();
+    border-radius: 16px;
+    background: ta.pressed ? C.pressed : C.surface;
+    clip: true;
+    Image {
+        source: root.icon;
+        image-fit: contain;
+        width: root.width;
+        height: root.show-title ? root.height - 22px : root.height;
+    }
+    if root.icon.width == 0 || root.show-title: Text {
+        y: root.show-title ? root.height - 22px : 0px;
+        height: root.show-title ? 22px : root.height;
+        text: root.title;
+        color: C.text;
+        font-size: 12px;
+        wrap: word-wrap;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    ta := TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+// Panel inferior con fondo oscurecido; tocar afuera lo cierra.
+component Sheet inherits Rectangle {
+    in property <length> panel-height: 300px;
+    in property <length> bottom-inset: 0px;
+    callback close();
+    background: #000000b0;
+    TouchArea {
+        clicked => { root.close(); }
+    }
+    Rectangle {
+        x: 0px;
+        y: root.height - self.height;
+        width: root.width;
+        height: root.panel-height + root.bottom-inset;
+        background: C.surface;
+        border-top-left-radius: 28px;
+        border-top-right-radius: 28px;
+        TouchArea { }
+        @children
+    }
+}
+
 export component MainWindow inherits Window {
     in property <string> status: "Conectando...";
+    in property <[Tile]> inputs;
+    in property <[Tile]> apps;
     callback button(string);
     callback request(string);
+    callback launch(string);
+    callback input(string);
     callback power();
+    callback ptr-move(int, int);
+    callback ptr-click();
+    callback ptr-scroll(int);
+    property <int> page: 0;
+    property <int> sheet: 0; // 0 = ninguno, 1 = entradas, 2 = números
+    property <bool> touchpad: false;
+    property <int> pages: 2 + Math.ceil(root.apps.length / 8);
     background: C.bg;
 
     VerticalLayout {
@@ -170,103 +301,258 @@ export component MainWindow inherits Window {
             horizontal-alignment: center;
         }
 
-        // Power y Mute
+        // Power | Entradas | Ajustes de la TV
         Rectangle {
             height: 56px;
             HorizontalLayout {
-                alignment: space-between;
+                spacing: 12px;
                 Pill {
-                    width: 56px; height: 56px; tint: C.accent;
+                    width: 56px; tint: C.accent;
                     clicked => { root.power(); }
                     Path {
                         width: 24px; height: 24px;
                         viewbox-width: 100; viewbox-height: 100;
                         commands: "M 30 18 A 38 38 0 1 0 70 18 M 50 5 L 50 50";
-                        stroke: C.text; stroke-width: 9px; stroke-line-cap: round;
+                        fill: transparent;
+                        stroke: C.text; stroke-width: 2.4px; stroke-line-cap: round;
                     }
                 }
                 Pill {
-                    width: 96px; height: 56px; label: "Mute";
-                    clicked => { root.button("MUTE"); }
+                    horizontal-stretch: 1;
+                    label: "Entradas";
+                    clicked => { root.sheet = 1; }
+                }
+                Pill {
+                    width: 56px;
+                    clicked => { root.launch("com.palm.app.settings"); }
+                    Path {
+                        width: 24px; height: 24px;
+                        viewbox-width: 100; viewbox-height: 100;
+                        commands: "M 12 25 L 88 25 M 12 50 L 88 50 M 12 75 L 88 75";
+                        fill: transparent;
+                        stroke: C.text; stroke-width: 2.4px; stroke-line-cap: round;
+                    }
                 }
             }
         }
 
-        // Cruceta
+        // Carrusel (deslizar): Vol/123/CH | reproducción | apps de a 8
+        Rectangle {
+            height: 170px;
+            SwipeGestureHandler {
+                handle-swipe-left: root.page < root.pages - 1;
+                handle-swipe-right: root.page > 0;
+                swiped => {
+                    if self.current-position.x < self.pressed-position.x {
+                        root.page += 1;
+                    } else {
+                        root.page -= 1;
+                    }
+                }
+
+                if root.page == 0: HorizontalLayout {
+                    spacing: 12px;
+                    Rocker {
+                        width: 84px; title: "VOL";
+                        up => { root.request("ssap://audio/volumeUp"); }
+                        down => { root.request("ssap://audio/volumeDown"); }
+                    }
+                    Pill {
+                        horizontal-stretch: 1; label: "123";
+                        clicked => { root.sheet = 2; }
+                    }
+                    Rocker {
+                        width: 84px; title: "CH";
+                        up => { root.request("ssap://tv/channelUp"); }
+                        down => { root.request("ssap://tv/channelDown"); }
+                    }
+                }
+                if root.page == 1: HorizontalLayout {
+                    spacing: 12px;
+                    Rocker {
+                        width: 84px; title: "VOL";
+                        up => { root.request("ssap://audio/volumeUp"); }
+                        down => { root.request("ssap://audio/volumeDown"); }
+                    }
+                    VerticalLayout {
+                        spacing: 10px;
+                        horizontal-stretch: 1;
+                        HorizontalLayout {
+                            spacing: 10px;
+                            Pill {
+                                clicked => { root.request("ssap://media.controls/play"); }
+                                Tri { width: 22px; height: 22px; rot: 90; }
+                            }
+                            Pill {
+                                clicked => { root.request("ssap://media.controls/pause"); }
+                                HorizontalLayout {
+                                    spacing: 5px;
+                                    Rectangle { width: 6px; height: 22px; background: C.text; border-radius: 2px; }
+                                    Rectangle { width: 6px; height: 22px; background: C.text; border-radius: 2px; }
+                                }
+                            }
+                        }
+                        HorizontalLayout {
+                            spacing: 10px;
+                            Pill {
+                                clicked => { root.request("ssap://media.controls/rewind"); }
+                                Tri { width: 16px; height: 16px; rot: 270; }
+                                Tri { width: 16px; height: 16px; rot: 270; }
+                            }
+                            Pill {
+                                clicked => { root.request("ssap://media.controls/fastForward"); }
+                                Tri { width: 16px; height: 16px; rot: 90; }
+                                Tri { width: 16px; height: 16px; rot: 90; }
+                            }
+                        }
+                    }
+                }
+                for app[i] in root.apps: TileButton {
+                    visible: root.page >= 2 && i >= (root.page - 2) * 8 && i < (root.page - 1) * 8;
+                    width: 80px;
+                    height: 80px;
+                    x: Math.mod(i, 4) * (parent.width - 80px) / 3;
+                    y: Math.mod(Math.floor(i / 4), 2) * 90px;
+                    icon: app.icon;
+                    title: app.title;
+                    clicked => { root.launch(app.id); }
+                }
+            }
+        }
+
+        // Puntos del carrusel
+        Rectangle {
+            height: 14px;
+            HorizontalLayout {
+                alignment: center;
+                spacing: 10px;
+                for p in root.pages: Rectangle {
+                    width: 10px; height: 10px; border-radius: 5px;
+                    background: p == root.page ? C.text : C.pressed;
+                    TouchArea { clicked => { root.page = p; } }
+                }
+            }
+        }
+
+        // Cruceta o touchpad
         Rectangle {
             vertical-stretch: 1;
             min-height: 200px;
-            DPad {
+            if !root.touchpad: DPad {
                 width: min(parent.width, parent.height);
                 height: self.width;
                 x: (parent.width - self.width) / 2;
                 y: (parent.height - self.height) / 2;
                 dir(d) => { root.button(d); }
             }
-        }
-
-        // Volumen | Back/Home/Exit | Canal
-        Rectangle {
-            height: 176px;
-            HorizontalLayout {
-                alignment: space-between;
-                spacing: 16px;
-                Rocker {
-                    width: 68px; title: "VOL";
-                    up => { root.request("ssap://audio/volumeUp"); }
-                    down => { root.request("ssap://audio/volumeDown"); }
+            if root.touchpad: TouchPad {
+                ptr-move(dx, dy) => { root.ptr-move(dx, dy); }
+                ptr-click => { root.ptr-click(); }
+                ptr-scroll(dy) => { root.ptr-scroll(dy); }
+            }
+            // Mute (parlante)
+            Pill {
+                x: 0px; y: 0px; width: 48px; height: 48px;
+                tint: transparent;
+                clicked => { root.button("MUTE"); }
+                Rectangle {
+                    width: 26px; height: 26px;
+                    Path {
+                        viewbox-width: 100; viewbox-height: 100;
+                        commands: "M 8 38 L 28 38 L 52 16 L 52 84 L 28 62 L 8 62 Z";
+                        fill: C.text;
+                    }
+                    Path {
+                        viewbox-width: 100; viewbox-height: 100;
+                        commands: "M 66 36 A 20 20 0 0 1 66 64 M 76 24 A 36 36 0 0 1 76 76";
+                        fill: transparent;
+                        stroke: C.text; stroke-width: 2px; stroke-line-cap: round;
+                    }
                 }
-                VerticalLayout {
-                    spacing: 10px;
-                    horizontal-stretch: 1;
-                    Pill { label: "Back"; clicked => { root.button("BACK"); } }
-                    Pill { label: "Home"; clicked => { root.button("HOME"); } }
-                    Pill { label: "Exit"; clicked => { root.button("EXIT"); } }
+            }
+            // Alternar cruceta / touchpad
+            Pill {
+                x: 0px; y: parent.height - 48px; width: 48px; height: 48px;
+                tint: transparent;
+                clicked => { root.touchpad = !root.touchpad; }
+                if !root.touchpad: Rectangle {
+                    width: 24px; height: 18px;
+                    border-radius: 4px; border-width: 2px; border-color: C.text;
                 }
-                Rocker {
-                    width: 68px; title: "CH";
-                    up => { root.request("ssap://tv/channelUp"); }
-                    down => { root.request("ssap://tv/channelDown"); }
+                if root.touchpad: Rectangle {
+                    width: 22px; height: 22px;
+                    border-radius: 11px; border-width: 2px; border-color: C.text;
                 }
             }
         }
 
-        // Reproducción
+        // Back | Home
         Rectangle {
-            height: 56px;
+            height: 64px;
             HorizontalLayout {
-                alignment: space-between;
-                Pill {
-                    width: 56px; height: 56px;
-                    clicked => { root.request("ssap://media.controls/rewind"); }
-                    Tri { width: 15px; height: 15px; rot: 270; }
-                    Tri { width: 15px; height: 15px; rot: 270; }
+                spacing: 12px;
+                Pill { label: "Back"; clicked => { root.button("BACK"); } }
+                Pill { label: "Home"; clicked => { root.button("HOME"); } }
+            }
+        }
+    }
+
+    // Panel de entradas
+    if root.sheet == 1: Sheet {
+        width: root.width; height: root.height;
+        panel-height: 90px + 120px * Math.ceil((root.inputs.length + 1) / 4);
+        bottom-inset: root.safe-area-insets.bottom;
+        close => { root.sheet = 0; }
+        Text {
+            x: 24px; y: 24px;
+            text: "Entradas";
+            color: C.text; font-size: 20px; font-weight: 700;
+        }
+        TileButton {
+            x: 16px; y: 70px;
+            width: 88px; height: 100px;
+            title: "TV en vivo"; show-title: true;
+            clicked => { root.launch("com.webos.app.livetv"); root.sheet = 0; }
+        }
+        for inp[i] in root.inputs: TileButton {
+            x: 16px + Math.mod(i + 1, 4) * 96px;
+            y: 70px + Math.floor((i + 1) / 4) * 110px;
+            width: 88px; height: 100px;
+            icon: inp.icon; title: inp.title; show-title: true;
+            clicked => { root.input(inp.id); root.sheet = 0; }
+        }
+    }
+
+    // Teclado numérico y colores
+    if root.sheet == 2: Sheet {
+        width: root.width; height: root.height;
+        panel-height: 420px;
+        bottom-inset: root.safe-area-insets.bottom;
+        close => { root.sheet = 0; }
+        VerticalLayout {
+            padding: 20px;
+            padding-bottom: 20px + root.safe-area-insets.bottom;
+            spacing: 10px;
+            for row in [[1, 2, 3], [4, 5, 6], [7, 8, 9]]: HorizontalLayout {
+                spacing: 10px;
+                for n in row: Pill {
+                    label: n;
+                    tint: C.bg;
+                    clicked => { root.button(n); }
                 }
-                Pill {
-                    width: 56px; height: 56px;
-                    clicked => { root.request("ssap://media.controls/play"); }
-                    Tri { width: 20px; height: 20px; rot: 90; }
-                }
-                Pill {
-                    width: 56px; height: 56px;
-                    clicked => { root.request("ssap://media.controls/pause"); }
-                    HorizontalLayout {
-                        spacing: 5px;
-                        Rectangle { width: 6px; height: 20px; background: C.text; border-radius: 2px; }
-                        Rectangle { width: 6px; height: 20px; background: C.text; border-radius: 2px; }
-                    }
-                }
-                Pill {
-                    width: 56px; height: 56px;
-                    clicked => { root.request("ssap://media.controls/stop"); }
-                    Rectangle { width: 18px; height: 18px; background: C.text; border-radius: 3px; }
-                }
-                Pill {
-                    width: 56px; height: 56px;
-                    clicked => { root.request("ssap://media.controls/fastForward"); }
-                    Tri { width: 15px; height: 15px; rot: 90; }
-                    Tri { width: 15px; height: 15px; rot: 90; }
-                }
+            }
+            HorizontalLayout {
+                spacing: 10px;
+                Rectangle { horizontal-stretch: 1; }
+                Pill { horizontal-stretch: 1; label: "0"; tint: C.bg; clicked => { root.button("0"); } }
+                Rectangle { horizontal-stretch: 1; }
+            }
+            HorizontalLayout {
+                spacing: 10px;
+                Pill { tint: #c62828; clicked => { root.button("RED"); } }
+                Pill { tint: #2e7d32; clicked => { root.button("GREEN"); } }
+                Pill { tint: #f9a825; clicked => { root.button("YELLOW"); } }
+                Pill { tint: #1565c0; clicked => { root.button("BLUE"); } }
             }
         }
     }
