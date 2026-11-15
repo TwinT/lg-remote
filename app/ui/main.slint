@@ -23,6 +23,10 @@ export component MainWindow inherits Window {
 
     VerticalLayout {
         padding: 16px;
+        padding-top: root.safe-area-insets.top + 16px;
+        padding-bottom: root.safe-area-insets.bottom + 16px;
+        padding-left: root.safe-area-insets.left + 16px;
+        padding-right: root.safe-area-insets.right + 16px;
         spacing: 12px;
         Text {
             text: root.status;
