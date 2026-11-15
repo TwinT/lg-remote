@@ -6,9 +6,10 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async, tungsten
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 type Ws = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
-const PERMISSIONS: [&str; 8] = [
+const PERMISSIONS: [&str; 10] = [
     "LAUNCH", "CONTROL_AUDIO", "CONTROL_POWER", "CONTROL_INPUT_TEXT",
     "CONTROL_MOUSE_AND_KEYBOARD", "CONTROL_INPUT_TV", "READ_TV_CHANNEL_LIST", "CONTROL_DISPLAY",
+    "READ_NETWORK_STATE", "CONTROL_INPUT_MEDIA_PLAYBACK",
 ];
 
 pub struct Tv {
@@ -59,6 +60,14 @@ impl Tv {
                 return Ok(m["payload"].clone());
             }
         }
+    }
+
+    /// MACs (wifi y cable) de la tele, para Wake-on-LAN.
+    pub async fn macs(&mut self) -> Result<Vec<String>> {
+        let p = self.request("ssap://com.webos.service.connectionmanager/getinfo", json!({})).await?;
+        Ok(["wifiInfo", "wiredInfo"].iter()
+            .filter_map(|k| p[*k]["macAddress"].as_str().map(str::to_owned))
+            .collect())
     }
 
     /// Botón del control: UP DOWN LEFT RIGHT ENTER BACK HOME EXIT MUTE ...

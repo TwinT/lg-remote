@@ -1,17 +1,150 @@
-component Btn inherits Rectangle {
+// Paleta
+global C {
+    out property <color> bg: #0e1014;
+    out property <color> surface: #1b1e25;
+    out property <color> pressed: #3a404d;
+    out property <color> text: #e6e9ef;
+    out property <color> muted: #9aa3b2;
+    out property <color> accent: #a50034;
+}
+
+// Triángulo apuntando a `rot` grados (0 arriba, 90 derecha, 180 abajo, 270 izquierda).
+component Tri inherits Path {
+    in property <int> rot: 0;
+    width: 18px;
+    height: 18px;
+    viewbox-width: 100;
+    viewbox-height: 100;
+    commands: root.rot == 90 ? "M 90 50 L 10 95 L 10 5 Z"
+        : root.rot == 180 ? "M 50 90 L 95 10 L 5 10 Z"
+        : root.rot == 270 ? "M 10 50 L 90 95 L 90 5 Z"
+        : "M 50 10 L 95 90 L 5 90 Z";
+    fill: C.text;
+}
+
+// Botón redondeado (píldora o círculo según el tamaño); admite icono como hijo.
+component Pill inherits Rectangle {
     in property <string> label;
-    in property <color> tint: #2b2f36;
+    in property <color> tint: C.surface;
     callback clicked();
-    background: ta.pressed ? #5a6376 : root.tint;
-    border-radius: 18px;
+    background: ta.pressed ? C.pressed : root.tint;
+    border-radius: min(root.width, root.height) / 2;
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            @children
+        }
+    }
     Text {
         text: root.label;
-        color: white;
-        font-size: 24px;
-        font-weight: 700;
+        color: C.text;
+        font-size: 17px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
     }
     ta := TouchArea {
         clicked => { root.clicked(); }
+    }
+}
+
+component Zone inherits Rectangle {
+    in property <int> rot;
+    callback clicked();
+    border-radius: 24px;
+    background: ta.pressed ? C.pressed : transparent;
+    Tri {
+        rot: root.rot;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+    ta := TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+component DPad inherits Rectangle {
+    callback dir(string);
+    background: C.surface;
+    border-radius: self.width / 2;
+    Zone {
+        x: root.width * 0.30; y: root.height * 0.04;
+        width: root.width * 0.40; height: root.height * 0.26;
+        rot: 0;
+        clicked => { root.dir("UP"); }
+    }
+    Zone {
+        x: root.width * 0.30; y: root.height * 0.70;
+        width: root.width * 0.40; height: root.height * 0.26;
+        rot: 180;
+        clicked => { root.dir("DOWN"); }
+    }
+    Zone {
+        x: root.width * 0.04; y: root.height * 0.30;
+        width: root.width * 0.26; height: root.height * 0.40;
+        rot: 270;
+        clicked => { root.dir("LEFT"); }
+    }
+    Zone {
+        x: root.width * 0.70; y: root.height * 0.30;
+        width: root.width * 0.26; height: root.height * 0.40;
+        rot: 90;
+        clicked => { root.dir("RIGHT"); }
+    }
+    Rectangle {
+        x: root.width * 0.31; y: root.height * 0.31;
+        width: root.width * 0.38; height: self.width;
+        border-radius: self.width / 2;
+        background: ok.pressed ? C.pressed : C.bg;
+        Text {
+            text: "OK";
+            color: C.text;
+            font-size: 22px;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        ok := TouchArea {
+            clicked => { root.dir("ENTER"); }
+        }
+    }
+}
+
+// Balancín vertical +/- (volumen, canal).
+component Rocker inherits Rectangle {
+    in property <string> title;
+    callback up();
+    callback down();
+    background: C.surface;
+    border-radius: self.width / 2;
+    Text {
+        text: root.title;
+        color: C.muted;
+        font-size: 12px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    Rectangle {
+        y: 0px; width: root.width; height: root.height / 2;
+        border-radius: root.width / 2;
+        background: tu.pressed ? C.pressed : transparent;
+        Text {
+            text: "+"; color: C.text; font-size: 30px;
+            horizontal-alignment: center; vertical-alignment: center;
+        }
+        tu := TouchArea { clicked => { root.up(); } }
+    }
+    Rectangle {
+        y: root.height / 2; width: root.width; height: root.height / 2;
+        border-radius: root.width / 2;
+        background: td.pressed ? C.pressed : transparent;
+        Text {
+            text: "-"; color: C.text; font-size: 30px;
+            horizontal-alignment: center; vertical-alignment: center;
+        }
+        td := TouchArea { clicked => { root.down(); } }
     }
 }
 
@@ -19,7 +152,8 @@ export component MainWindow inherits Window {
     in property <string> status: "Conectando...";
     callback button(string);
     callback request(string);
-    background: #101216;
+    callback power();
+    background: C.bg;
 
     VerticalLayout {
         padding: 16px;
@@ -27,53 +161,113 @@ export component MainWindow inherits Window {
         padding-bottom: root.safe-area-insets.bottom + 16px;
         padding-left: root.safe-area-insets.left + 16px;
         padding-right: root.safe-area-insets.right + 16px;
-        spacing: 12px;
+        spacing: 14px;
+
         Text {
             text: root.status;
-            color: #9aa3b2;
-            font-size: 16px;
+            color: C.muted;
+            font-size: 15px;
             horizontal-alignment: center;
-            vertical-stretch: 0;
         }
-        HorizontalLayout {
-            spacing: 12px;
-            vertical-stretch: 1;
-            Btn { label: "Power"; tint: #b3261e; clicked => { root.request("ssap://system/turnOff"); } }
-            Btn { label: "Mute"; clicked => { root.button("MUTE"); } }
-        }
-        GridLayout {
-            spacing: 12px;
-            vertical-stretch: 3;
-            Row {
-                Rectangle { }
-                Btn { label: "^"; clicked => { root.button("UP"); } }
-                Rectangle { }
-            }
-            Row {
-                Btn { label: "<"; clicked => { root.button("LEFT"); } }
-                Btn { label: "OK"; tint: #3a4a7a; clicked => { root.button("ENTER"); } }
-                Btn { label: ">"; clicked => { root.button("RIGHT"); } }
-            }
-            Row {
-                Rectangle { }
-                Btn { label: "v"; clicked => { root.button("DOWN"); } }
-                Rectangle { }
+
+        // Power y Mute
+        Rectangle {
+            height: 56px;
+            HorizontalLayout {
+                alignment: space-between;
+                Pill {
+                    width: 56px; height: 56px; tint: C.accent;
+                    clicked => { root.power(); }
+                    Path {
+                        width: 24px; height: 24px;
+                        viewbox-width: 100; viewbox-height: 100;
+                        commands: "M 30 18 A 38 38 0 1 0 70 18 M 50 5 L 50 50";
+                        stroke: C.text; stroke-width: 9px; stroke-line-cap: round;
+                    }
+                }
+                Pill {
+                    width: 96px; height: 56px; label: "Mute";
+                    clicked => { root.button("MUTE"); }
+                }
             }
         }
-        HorizontalLayout {
-            spacing: 12px;
+
+        // Cruceta
+        Rectangle {
             vertical-stretch: 1;
-            Btn { label: "Back"; clicked => { root.button("BACK"); } }
-            Btn { label: "Home"; clicked => { root.button("HOME"); } }
-            Btn { label: "Exit"; clicked => { root.button("EXIT"); } }
+            min-height: 200px;
+            DPad {
+                width: min(parent.width, parent.height);
+                height: self.width;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                dir(d) => { root.button(d); }
+            }
         }
-        HorizontalLayout {
-            spacing: 12px;
-            vertical-stretch: 1;
-            Btn { label: "Vol -"; clicked => { root.request("ssap://audio/volumeDown"); } }
-            Btn { label: "Vol +"; clicked => { root.request("ssap://audio/volumeUp"); } }
-            Btn { label: "CH -"; clicked => { root.request("ssap://tv/channelDown"); } }
-            Btn { label: "CH +"; clicked => { root.request("ssap://tv/channelUp"); } }
+
+        // Volumen | Back/Home/Exit | Canal
+        Rectangle {
+            height: 176px;
+            HorizontalLayout {
+                alignment: space-between;
+                spacing: 16px;
+                Rocker {
+                    width: 68px; title: "VOL";
+                    up => { root.request("ssap://audio/volumeUp"); }
+                    down => { root.request("ssap://audio/volumeDown"); }
+                }
+                VerticalLayout {
+                    spacing: 10px;
+                    horizontal-stretch: 1;
+                    Pill { label: "Back"; clicked => { root.button("BACK"); } }
+                    Pill { label: "Home"; clicked => { root.button("HOME"); } }
+                    Pill { label: "Exit"; clicked => { root.button("EXIT"); } }
+                }
+                Rocker {
+                    width: 68px; title: "CH";
+                    up => { root.request("ssap://tv/channelUp"); }
+                    down => { root.request("ssap://tv/channelDown"); }
+                }
+            }
+        }
+
+        // Reproducción
+        Rectangle {
+            height: 56px;
+            HorizontalLayout {
+                alignment: space-between;
+                Pill {
+                    width: 56px; height: 56px;
+                    clicked => { root.request("ssap://media.controls/rewind"); }
+                    Tri { width: 15px; height: 15px; rot: 270; }
+                    Tri { width: 15px; height: 15px; rot: 270; }
+                }
+                Pill {
+                    width: 56px; height: 56px;
+                    clicked => { root.request("ssap://media.controls/play"); }
+                    Tri { width: 20px; height: 20px; rot: 90; }
+                }
+                Pill {
+                    width: 56px; height: 56px;
+                    clicked => { root.request("ssap://media.controls/pause"); }
+                    HorizontalLayout {
+                        spacing: 5px;
+                        Rectangle { width: 6px; height: 20px; background: C.text; border-radius: 2px; }
+                        Rectangle { width: 6px; height: 20px; background: C.text; border-radius: 2px; }
+                    }
+                }
+                Pill {
+                    width: 56px; height: 56px;
+                    clicked => { root.request("ssap://media.controls/stop"); }
+                    Rectangle { width: 18px; height: 18px; background: C.text; border-radius: 3px; }
+                }
+                Pill {
+                    width: 56px; height: 56px;
+                    clicked => { root.request("ssap://media.controls/fastForward"); }
+                    Tri { width: 15px; height: 15px; rot: 90; }
+                    Tri { width: 15px; height: 15px; rot: 90; }
+                }
+            }
         }
     }
 }
