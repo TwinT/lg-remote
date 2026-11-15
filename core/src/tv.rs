@@ -1,5 +1,6 @@
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
+use std::time::{Duration, Instant};
 use tokio::net::TcpStream;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async, tungstenite::Message};
 
@@ -33,7 +34,7 @@ fn items(v: &Value, title_key: &str) -> Vec<Item> {
 
 pub struct Tv {
     ws: Ws,
-    ptr: Option<Ws>,
+    ptr: Option<(Ws, Instant)>,
     n: u32,
 }
 
@@ -128,15 +129,25 @@ impl Tv {
         self.pointer(format!("type:scroll\ndx:0\ndy:{dy}\n\n")).await
     }
 
-    /// Mensaje por el socket del puntero (se abre la primera vez).
+    /// Mensaje por el socket del puntero. La tele parece dar ese socket a un solo cliente a la vez
+    /// (el que abre uno nuevo desplaza al anterior, sin avisar), así que no se retiene: si estuvo
+    /// ocioso más de `PTR_IDLE` se reabre, y si falla se reabre una vez.
     async fn pointer(&mut self, msg: String) -> Result<()> {
-        if self.ptr.is_none() {
-            let p = self.request("ssap://com.webos.service.networkinput/getPointerInputSocket", json!({})).await?;
-            let path = p["socketPath"].as_str().ok_or("sin socketPath")?;
-            self.ptr = Some(connect_async(path).await?.0);
+        const PTR_IDLE: Duration = Duration::from_secs(1);
+        for _ in 0..2 {
+            if self.ptr.as_ref().is_none_or(|(_, last)| last.elapsed() > PTR_IDLE) {
+                let p = self.request("ssap://com.webos.service.networkinput/getPointerInputSocket", json!({})).await?;
+                let path = p["socketPath"].as_str().ok_or("sin socketPath")?;
+                self.ptr = Some((connect_async(path).await?.0, Instant::now()));
+            }
+            let (ws, last) = self.ptr.as_mut().unwrap();
+            if ws.send(Message::text(msg.clone())).await.is_ok() {
+                *last = Instant::now();
+                return Ok(());
+            }
+            self.ptr = None;
         }
-        self.ptr.as_mut().unwrap().send(Message::text(msg)).await?;
-        Ok(())
+        Err("socket del puntero cerrado".into())
     }
 
     async fn send(&mut self, v: &Value) -> Result<()> {

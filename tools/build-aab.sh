@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Arma target/aab/out/app.aab (para subir a Play) y universal.apk (para probar por adb).
 # Requisitos: Android SDK (build-tools 35, platforms 36), NDK 27, bundletool, JDK, ImageMagick, secret-tool.
-# Uso: tools/build-aab.sh            (VERSION_CODE=2 VERSION_NAME=0.1.1 tools/build-aab.sh para una nueva versión)
+# Uso: tools/build-aab.sh            (VERSION_CODE=3 VERSION_NAME=0.1.2 tools/build-aab.sh para una nueva versión)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 PKG=io.github.twint.lgdoom
 APP_NAME="Zap Remote"
-VERSION_CODE=${VERSION_CODE:-1}
-VERSION_NAME=${VERSION_NAME:-0.1.0}
+VERSION_CODE=${VERSION_CODE:-2}
+VERSION_NAME=${VERSION_NAME:-0.1.1}
 MIN_SDK=26
 TARGET_SDK=36
 LIB=lg_app
